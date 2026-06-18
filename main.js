@@ -94,21 +94,28 @@ function boundsValid(bn) {
 }
 
 // Restore the user's remembered position/size if it's still valid; otherwise auto-snap.
+// Suppress saving during the programmatic move so it can't overwrite the saved bounds
+// (e.g. while the iPad display is connecting/disconnecting).
 function restoreOrPlace() {
   if (!win) return;
+  _suppressSave = true;
   if (boundsValid(config.bounds)) win.setBounds(config.bounds);
   else placeWindow();
+  setTimeout(() => { _suppressSave = false; }, 700);
 }
 
-// Persist wherever the user drags/resizes the dock (debounced).
+// Persist wherever the USER drags/resizes the dock. OS/automatic moves are suppressed.
 let _boundsTimer = null;
 let _suppressSave = false;
 function saveBounds() {
   if (!win || _suppressSave) return;
-  config.bounds = win.getBounds();
+  const b = win.getBounds();
+  if (!boundsValid(b)) return;          // never save an off-screen/transient position
+  config.bounds = b;
   clearTimeout(_boundsTimer);
-  _boundsTimer = setTimeout(saveConfig, 700);
+  _boundsTimer = setTimeout(saveConfig, 300);
 }
+function flushBounds() { if (_boundsTimer) { clearTimeout(_boundsTimer); saveConfig(); } }
 
 function createWindow() {
   win = new BrowserWindow({
@@ -148,10 +155,10 @@ function createWindow() {
   win.on('moved', saveBounds);
   win.on('resized', saveBounds);
 
-  // Only re-evaluate placement when the set of displays actually changes
-  // (and even then, keep the user's spot if it's still on a valid screen).
+  // When the iPad display (re)connects, snap back to the remembered spot.
+  // When it disconnects, only relocate if the window is now stranded off-screen.
   screen.on('display-added', restoreOrPlace);
-  screen.on('display-removed', restoreOrPlace);
+  screen.on('display-removed', () => { if (win && !boundsValid(win.getBounds())) restoreOrPlace(); });
 }
 
 // Bring the dock back from minimized/hidden and re-assert always-on-top.
@@ -472,7 +479,8 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => { if (win) { placeWindow(); win.show(); } });
+  app.on('second-instance', () => { showDock(); });   // just reveal it — don't reposition
+  app.on('before-quit', flushBounds);                  // persist position before exiting
   app.whenReady().then(() => {
     loadConfig();
     createWindow();
