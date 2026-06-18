@@ -240,29 +240,42 @@ ipcMain.handle('pick-photo-folder', async () => {
   return config.photoFolder;
 });
 
-ipcMain.handle('list-photos', () => {
+// Async, time-bounded recursive scan. Uses fs.promises (libuv threadpool) so a
+// slow/offline network share NEVER blocks the main process / UI. Caches the last
+// good result per folder so a transient outage keeps showing the previous photos.
+const fsp = fs.promises;
+let _photoCache = { folder: null, list: [] };
+let _photoScanning = false;
+
+ipcMain.handle('list-photos', async () => {
   const folder = config.photoFolder;
-  if (!folder || !fs.existsSync(folder)) return [];
+  if (!folder) return [];
+  if (_photoScanning) return _photoCache.list;          // don't pile up scans
+  _photoScanning = true;
   const out = [];
-  const MAX = 5000;        // safety cap
-  const MAX_DEPTH = 8;     // how deep to recurse into subfolders
-  function walk(dir, depth) {
-    if (depth > MAX_DEPTH || out.length >= MAX) return;
+  const MAX = 5000;
+  const MAX_DEPTH = 8;
+  const deadline = Date.now() + 6000;                   // give up after 6s (e.g. share offline)
+  async function walk(dir, depth) {
+    if (depth > MAX_DEPTH || out.length >= MAX || Date.now() > deadline) return;
     let entries;
-    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+    try { entries = await fsp.readdir(dir, { withFileTypes: true }); } catch (e) { return; }
     for (const e of entries) {
-      if (out.length >= MAX) break;
+      if (out.length >= MAX || Date.now() > deadline) break;
       const full = path.join(dir, e.name);
       if (e.isDirectory()) {
         if (e.name.startsWith('.') || e.name === '$RECYCLE.BIN' || e.name === 'System Volume Information') continue;
-        walk(full, depth + 1);
+        await walk(full, depth + 1);
       } else if (e.isFile() && IMG_EXT.has(path.extname(e.name).toLowerCase())) {
         out.push('file://' + full.replace(/\\/g, '/'));
       }
     }
   }
-  try { walk(folder, 0); } catch (e) {}
-  return out.sort();
+  try { await walk(folder, 0); } catch (e) {}
+  _photoScanning = false;
+  if (out.length) { _photoCache = { folder, list: out }; return out; }
+  // nothing found (offline share / empty) — reuse cache if it's the same folder
+  return (_photoCache.folder === folder) ? _photoCache.list : [];
 });
 
 // --- GPU via nvidia-smi (preferred on NVIDIA), fallback to systeminformation ---
@@ -290,7 +303,15 @@ function getGpuNvidia() {
       });
   });
 }
+// Cache GPU result briefly so rapid get-stats calls don't spawn nvidia-smi every time.
+let _gpuCache = { ts: 0, data: null };
 async function getGpu() {
+  if (Date.now() - _gpuCache.ts < 1800) return _gpuCache.data;
+  const data = await getGpuRaw();
+  _gpuCache = { ts: Date.now(), data };
+  return data;
+}
+async function getGpuRaw() {
   const nv = await getGpuNvidia();
   if (nv) return nv;
   if (!si) return null;
