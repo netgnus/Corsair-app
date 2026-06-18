@@ -164,10 +164,13 @@ function showDock() {
 }
 
 function buildTray() {
-  // 1x1 transparent fallback icon so the tray always shows
-  const icon = nativeImage.createFromDataURL(
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAHElEQVR42mNk+M9Qz0BFwDiqgGGAFTAyMAwAAB9pBgGzqQ3yAAAAAElFTkSuQmCC'
-  );
+  // bar-chart tray icon; fall back to a 1x1 transparent pixel if the file is missing
+  let icon = nativeImage.createFromPath(path.join(__dirname, 'tray.png'));
+  if (icon.isEmpty()) {
+    icon = nativeImage.createFromDataURL(
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAHElEQVR42mNk+M9Qz0BFwDiqgGGAFTAyMAwAAB9pBgGzqQ3yAAAAAElFTkSuQmCC'
+    );
+  }
   tray = new Tray(icon);
   rebuildTrayMenu();
   tray.setToolTip('iPad Dock — click to show/hide');
