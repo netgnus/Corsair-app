@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>iPad Dock</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="dock" id="dock">
+    <!-- three interchangeable slots are injected here by renderer.js -->
+  </div>
+
+  <!-- top drag handle / controls -->
+  <div class="handle" id="dragHandle" title="Drag to move">
+    <button class="mini" id="settingsBtn" title="Settings">⚙</button>
+    <button class="mini" id="minBtn" title="Minimize">—</button>
+  </div>
+
+  <!-- settings overlay -->
+  <div class="overlay hidden" id="settings">
+    <div class="panel">
+      <h2>Settings</h2>
+      <div class="row">
+        <label>Photo folder</label>
+        <div class="folder-line"><span id="folderPath" class="path">—</span><button class="btn" id="pickFolder2">Browse…</button></div>
+      </div>
+      <div class="row">
+        <label class="chk"><input type="checkbox" id="shuffleChk" /> Shuffle photos (random order)</label>
+      </div>
+      <div class="row">
+        <label>Slideshow interval</label>
+        <select id="slideSel">
+          <option value="4000">4 seconds</option>
+          <option value="8000">8 seconds</option>
+          <option value="15000">15 seconds</option>
+          <option value="30000">30 seconds</option>
+          <option value="60000">1 minute</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>Weather units</label>
+        <select id="unitSel">
+          <option value="metric">Celsius / km·h</option>
+          <option value="imperial">Fahrenheit / mph</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>Weather location</label>
+        <div class="loc-line">
+          <label class="chk"><input type="checkbox" id="autoLoc" /> Auto (by IP)</label>
+          <input type="number" step="any" id="latIn" placeholder="lat" />
+          <input type="number" step="any" id="lonIn" placeholder="lon" />
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn ghost" id="closeSettings">Close</button>
+        <button class="btn" id="saveSettings">Save</button>
+      </div>
+      <p class="hint">Each slot has a switcher row at its top — tap an icon to change what that slot shows. Right-click the tray icon to pick the display and bar height.</p>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

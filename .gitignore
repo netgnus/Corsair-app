@@ -1,0 +1,16 @@
+# dependencies (reinstalled via `npm install`)
+node_modules/
+
+# runtime / generated files
+fps.json
+fps-debug.log
+fps-diag.log
+fps-diag.ps1
+
+# the launcher shortcut (per-machine)
+iPad Dock.lnk
+
+# OS / editor cruft
+Thumbs.db
+.DS_Store
+*.tmp
