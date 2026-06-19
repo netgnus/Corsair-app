@@ -195,7 +195,12 @@ function makeSystem() {
       gauge('.cpu', s.cpu.pct); q('.cpu .pct').textContent = Math.round(s.cpu.pct);
       if (s.cpu.name) q('.cpu .gauge-name').textContent = shortChip(s.cpu.name);
     }
-    if (s.mem) { gauge('.mem', s.mem.pct); q('.mem .pct').textContent = Math.round(s.mem.pct); q('.mem .gauge-name').textContent = fmtBytes(s.mem.total); q('.memtext').textContent = `${fmtBytes(s.mem.used)} / ${fmtBytes(s.mem.total)}`; }
+    if (s.mem) {
+      gauge('.mem', s.mem.pct); q('.mem .pct').textContent = Math.round(s.mem.pct);
+      const capGB = Math.round((s.mem.total / 1073741824) / 2) * 2;   // installed capacity (e.g. 32, not 31)
+      q('.mem .gauge-name').textContent = capGB + ' GB';
+      q('.memtext').textContent = `${fmtBytes(s.mem.used)} / ${capGB} GB`;
+    }
     if (s.gpu) {
       q('.gpu').style.display = '';
       if (s.gpu.util != null) { gauge('.gpu', s.gpu.util); q('.gpu .pct').textContent = Math.round(s.gpu.util); }
