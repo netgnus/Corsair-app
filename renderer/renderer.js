@@ -171,6 +171,17 @@ function makeSystem() {
       <div class="gauge mem"><svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52"/><circle class="bar" cx="60" cy="60" r="52"/></svg><div class="gauge-val"><span class="num pct">–</span><span class="unit">%</span></div><div class="gauge-label">RAM</div></div>
       <div class="gauge batt"><svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52"/><circle class="bar" cx="60" cy="60" r="52"/></svg><div class="gauge-val"><span class="num pct">–</span><span class="unit">%</span></div><div class="gauge-label batt-label">BATT</div></div>
     </div>
+    <div class="media">
+      <div class="media-info">
+        <div class="media-title">Nothing playing</div>
+        <div class="media-artist"></div>
+      </div>
+      <div class="media-ctrl">
+        <button class="m-prev" title="Previous">⏮</button>
+        <button class="m-play" title="Play / Pause">⏯</button>
+        <button class="m-next" title="Next">⏭</button>
+      </div>
+    </div>
     <div class="net">
       <div class="net-item">↓ <span class="rx">0</span></div>
       <div class="net-item">↑ <span class="tx">0</span></div>
@@ -218,7 +229,30 @@ function makeSystem() {
   }
   update();
   const t = setInterval(update, 2000);
-  return { node, destroy() { clearInterval(t); } };
+
+  // --- now-playing media strip ---
+  async function updateMedia() {
+    const m = await window.dock.getMedia();
+    const title = q('.media-title'), artist = q('.media-artist'), playBtn = q('.m-play');
+    if (m && m.title) {
+      title.textContent = m.title;
+      artist.textContent = m.artist || '';
+      playBtn.textContent = (m.status === 4) ? '⏸' : '▶';   // 4 = Playing
+      q('.media').classList.add('active');
+    } else {
+      title.textContent = 'Nothing playing';
+      artist.textContent = '';
+      playBtn.textContent = '⏯';
+      q('.media').classList.remove('active');
+    }
+  }
+  q('.m-prev').onclick = () => { window.dock.mediaKey('prev'); setTimeout(updateMedia, 600); };
+  q('.m-next').onclick = () => { window.dock.mediaKey('next'); setTimeout(updateMedia, 600); };
+  q('.m-play').onclick = () => { window.dock.mediaKey('playpause'); setTimeout(updateMedia, 400); };
+  updateMedia();
+  const tm = setInterval(updateMedia, 4000);
+
+  return { node, destroy() { clearInterval(t); clearInterval(tm); } };
 }
 
 function makeBrowser(slotIndex) {
