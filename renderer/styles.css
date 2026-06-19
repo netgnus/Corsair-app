@@ -126,6 +126,24 @@ html, body {
 .w-desc { font-size: clamp(11px, 2.4vh, 16px); color: var(--dim); margin-top: 4px; }
 .w-city { font-size: clamp(10px, 2vh, 13px); color: var(--dim); opacity: 0.7; }
 .w-extra { font-size: clamp(11px, 2.2vh, 14px); color: var(--dim); margin-top: clamp(6px, 2vh, 14px); display: flex; gap: clamp(10px, 2vw, 18px); flex-wrap: wrap; justify-content: center; }
+.clk-media { display: flex; align-items: center; gap: 12px; margin-top: clamp(8px, 2.5vh, 18px); width: 78%; max-width: 340px; }
+.clk-media button {
+  -webkit-app-region: no-drag; flex-shrink: 0; border: none; border-radius: 50%;
+  width: clamp(32px, 5.5vh, 42px); height: clamp(32px, 5.5vh, 42px);
+  background: rgba(255,255,255,0.08); color: var(--txt);
+  font-size: clamp(13px, 2.3vh, 17px); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.clk-media .cm-play { background: var(--accent); color: #fff; }
+.clk-media button:hover { filter: brightness(1.15); }
+.cm-vol {
+  -webkit-app-region: no-drag; flex: 1; height: 6px; -webkit-appearance: none; appearance: none;
+  background: rgba(255,255,255,0.15); border-radius: 3px; outline: none; cursor: pointer;
+}
+.cm-vol::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; cursor: pointer; box-shadow: 0 0 4px rgba(0,0,0,0.4);
+}
 
 /* ---------- System monitor widget ---------- */
 .monitor { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 14px 18px; }

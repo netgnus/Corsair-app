@@ -464,6 +464,21 @@ ipcMain.on('media-key', (_e, key) => {
     { windowsHide: true }, () => {});
 });
 
+// --- System volume (CoreAudio via volume.ps1) ---
+function runVolume(args) {
+  return new Promise((resolve) => {
+    execFile('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'volume.ps1'), ...args],
+      { timeout: 4000, windowsHide: true }, (err, stdout) => resolve((stdout || '').trim()));
+  });
+}
+ipcMain.handle('get-volume', async () => { const v = parseInt(await runVolume(['get']), 10); return isNaN(v) ? null : v; });
+ipcMain.handle('set-volume', async (_e, pct) => {
+  pct = Math.max(0, Math.min(100, parseInt(pct, 10) || 0));
+  const v = parseInt(await runVolume(['set', String(pct)]), 10);
+  return isNaN(v) ? pct : v;
+});
+ipcMain.handle('toggle-mute', async () => (await runVolume(['mute'])) === 'muted');
+
 // --- App launcher: read apps.json (from resolve-apps.ps1) and launch on tap ---
 ipcMain.handle('get-launcher', () => {
   try {

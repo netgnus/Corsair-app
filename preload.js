@@ -12,5 +12,8 @@ contextBridge.exposeInMainWorld('dock', {
   mediaKey: (key) => ipcRenderer.send('media-key', key),
   getLauncher: () => ipcRenderer.invoke('get-launcher'),
   launchApp: (target) => ipcRenderer.send('launch-app', target),
+  getVolume: () => ipcRenderer.invoke('get-volume'),
+  setVolume: (pct) => ipcRenderer.invoke('set-volume', pct),
+  toggleMute: () => ipcRenderer.invoke('toggle-mute'),
   onOpenSettings: (cb) => ipcRenderer.on('open-settings', cb)
 });

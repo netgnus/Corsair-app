@@ -48,7 +48,12 @@ function makeClock() {
       </div>
     </div>
     <div class="w-extra"></div>
-    <div class="w-extra w-extra2"></div>`);
+    <div class="w-extra w-extra2"></div>
+    <div class="clk-media">
+      <button class="cm-play" title="Play / Pause">⏯</button>
+      <button class="cm-mute" title="Mute">🔊</button>
+      <input class="cm-vol" type="range" min="0" max="100" value="50" />
+    </div>`);
   const q = (s) => node.querySelector(s);
 
   function tick() {
@@ -81,6 +86,18 @@ function makeClock() {
         `<span>🌇 ${fmtT(d.sunset)}</span>`;
     }
   }
+  // --- media play + system volume ---
+  const play = q('.cm-play'), mute = q('.cm-mute'), vol = q('.cm-vol');
+  function paintVol() {
+    const p = vol.value;
+    vol.style.background = `linear-gradient(to right, var(--accent) ${p}%, rgba(255,255,255,0.15) ${p}%)`;
+  }
+  play.onclick = () => window.dock.mediaKey('playpause');
+  mute.onclick = async () => { const muted = await window.dock.toggleMute(); mute.textContent = muted ? '🔇' : '🔊'; };
+  vol.addEventListener('input', paintVol);
+  vol.addEventListener('change', async () => { const v = await window.dock.setVolume(vol.value); if (v != null) { vol.value = v; paintVol(); } });
+  (async () => { const v = await window.dock.getVolume(); if (v != null) vol.value = v; paintVol(); })();
+
   tick(); weather();
   const t1 = setInterval(tick, 1000);
   const t2 = setInterval(weather, 10 * 60 * 1000);
