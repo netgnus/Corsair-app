@@ -155,6 +155,11 @@ html, body {
 .gauge-val .num { font-size: clamp(15px, min(2.6vw, 7vh), 36px); font-weight: 300; font-variant-numeric: tabular-nums; }
 .gauge-val .unit { font-size: 14px; color: var(--dim); }
 .gauge-label { position: absolute; bottom: 14%; font-size: 11px; letter-spacing: 2px; color: var(--dim); }
+.gauge-name {
+  position: absolute; top: 60%; left: 50%; transform: translateX(-50%);
+  font-size: clamp(6px, 1.2vh, 9px); letter-spacing: 0.2px; color: var(--dim);
+  max-width: 64%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .net { display: flex; gap: 18px; justify-content: center; margin-top: 8px; font-size: 14px; color: var(--txt); font-variant-numeric: tabular-nums; flex-wrap: wrap; }
 .net .dim { color: var(--dim); }
 

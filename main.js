@@ -356,6 +356,15 @@ function getFps() {
   } catch (e) { return { fps: null, status: 'error' }; }
 }
 
+// --- CPU model name (cached; doesn't change) ---
+let _cpuName = null;
+async function getCpuName() {
+  if (_cpuName != null) return _cpuName;
+  _cpuName = '';
+  if (si) { try { const c = await si.cpu(); _cpuName = (c.brand || `${c.manufacturer || ''} ${c.family || ''}`).trim(); } catch (e) {} }
+  return _cpuName;
+}
+
 // --- pick the real active network interface (prefer Wi-Fi/real NIC, skip VPN/virtual) ---
 let _netIface = null, _netIfaceTs = 0;
 const NET_BAD = /zerotier|loopback|bluetooth|virtual|vmware|hyper-v|vethernet|\btap\b|\btun\b|spacedesk|parsec|duet|displaylink|wintun/i;
@@ -398,7 +407,7 @@ ipcMain.handle('get-stats', async () => {
       si.battery(),
       getGpu()
     ]);
-    stats.cpu = { pct: load.currentLoad, cores: load.cpus ? load.cpus.length : os.cpus().length };
+    stats.cpu = { pct: load.currentLoad, cores: load.cpus ? load.cpus.length : os.cpus().length, name: await getCpuName() };
     stats.mem = { used: mem.active, total: mem.total, pct: (mem.active / mem.total) * 100 };
     const n = Array.isArray(net) ? net[0] : net;
     if (n) stats.net = { rx: n.rx_sec || 0, tx: n.tx_sec || 0, iface: n.iface };
