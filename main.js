@@ -425,9 +425,19 @@ ipcMain.handle('get-weather', async () => {
     const windUnit = unit === 'imperial' ? 'mph' : 'kmh';
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
       `&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,is_day` +
-      `&temperature_unit=${tempUnit}&wind_speed_unit=${windUnit}&timezone=auto`;
+      `&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min` +
+      `&temperature_unit=${tempUnit}&wind_speed_unit=${windUnit}&timezone=auto&forecast_days=1`;
     const w = await fetch(url).then(r => r.json());
-    return { city, unit, current: w.current || null };
+    let daily = null;
+    if (w.daily) {
+      daily = {
+        sunrise: w.daily.sunrise && w.daily.sunrise[0],
+        sunset: w.daily.sunset && w.daily.sunset[0],
+        tMax: w.daily.temperature_2m_max && w.daily.temperature_2m_max[0],
+        tMin: w.daily.temperature_2m_min && w.daily.temperature_2m_min[0]
+      };
+    }
+    return { city, unit, current: w.current || null, daily };
   } catch (e) {
     return { error: e.message };
   }

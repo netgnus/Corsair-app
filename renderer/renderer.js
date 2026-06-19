@@ -47,7 +47,8 @@ function makeClock() {
         <div class="w-city"></div>
       </div>
     </div>
-    <div class="w-extra"></div>`);
+    <div class="w-extra"></div>
+    <div class="w-extra w-extra2"></div>`);
   const q = (s) => node.querySelector(s);
 
   function tick() {
@@ -71,6 +72,14 @@ function makeClock() {
       `<span>Feels ${Math.round(c.apparent_temperature)}${tu}</span>` +
       `<span>💧 ${c.relative_humidity_2m}%</span>` +
       `<span>💨 ${Math.round(c.wind_speed_10m)} ${wu}</span>`;
+    const d = w.daily;
+    if (d) {
+      const fmtT = (iso) => iso ? new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—';
+      q('.w-extra2').innerHTML =
+        ((d.tMax != null && d.tMin != null) ? `<span>↑ ${Math.round(d.tMax)}${tu}&nbsp;&nbsp;↓ ${Math.round(d.tMin)}${tu}</span>` : '') +
+        `<span>🌅 ${fmtT(d.sunrise)}</span>` +
+        `<span>🌇 ${fmtT(d.sunset)}</span>`;
+    }
   }
   tick(); weather();
   const t1 = setInterval(tick, 1000);
