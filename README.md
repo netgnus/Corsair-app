@@ -3,6 +3,8 @@
 A sleek, always-on-top **control deck** for a second display — built for an iPad Pro 12.9" used as an
 extended monitor on Windows 11, docked along the bottom strip of the screen.
 
+![iPad Dock — System, Photos, and Clock + Weather panels](screenshots/dock.png)
+
 It's a frameless [Electron](https://www.electronjs.org/) bar split into **three interchangeable slots**.
 Tap the switcher at the top of any slot to change what it shows.
 
