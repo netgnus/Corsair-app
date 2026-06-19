@@ -305,7 +305,8 @@ function buildSlots() {
     const slot = el('div', 'slot');
     const switcher = el('div', 'slot-switcher');
     ORDER.forEach(key => {
-      const b = el('button', 'swbtn', WIDGETS[key].icon);
+      const b = el('button', 'swbtn');
+      b.innerHTML = `<span class="swicon">${WIDGETS[key].icon}</span><span class="swlabel">${WIDGETS[key].label}</span>`;
       b.title = WIDGETS[key].label;
       b.dataset.key = key;
       b.onclick = () => setSlot(i, key);
