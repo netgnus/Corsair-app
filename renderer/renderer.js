@@ -160,9 +160,7 @@ function makeSystem() {
         <div class="media-artist"></div>
       </div>
       <div class="media-ctrl">
-        <button class="m-prev" title="Previous">⏮</button>
         <button class="m-play" title="Play / Pause">⏯</button>
-        <button class="m-next" title="Next">⏭</button>
         <button class="cm-mute" title="Mute">🔊</button>
         <input class="cm-vol" type="range" min="0" max="100" value="50" />
       </div>
@@ -231,8 +229,6 @@ function makeSystem() {
       q('.media').classList.remove('active');
     }
   }
-  q('.m-prev').onclick = () => { window.dock.mediaKey('prev'); setTimeout(updateMedia, 600); };
-  q('.m-next').onclick = () => { window.dock.mediaKey('next'); setTimeout(updateMedia, 600); };
   q('.m-play').onclick = () => { window.dock.mediaKey('playpause'); setTimeout(updateMedia, 400); };
   updateMedia();
   const tm = setInterval(updateMedia, 4000);
