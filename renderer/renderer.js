@@ -162,7 +162,7 @@ function makeSystem() {
     <div class="gauge-row">
       <div class="gauge cpu"><svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52"/><circle class="bar" cx="60" cy="60" r="52"/></svg><div class="gauge-val"><span class="num pct">–</span><span class="unit">%</span></div><div class="gauge-name"></div><div class="gauge-label">CPU</div></div>
       <div class="gauge gpu"><svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52"/><circle class="bar" cx="60" cy="60" r="52"/></svg><div class="gauge-val"><span class="num pct">–</span><span class="unit">%</span></div><div class="gauge-name"></div><div class="gauge-label">GPU</div></div>
-      <div class="gauge mem"><svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52"/><circle class="bar" cx="60" cy="60" r="52"/></svg><div class="gauge-val"><span class="num pct">–</span><span class="unit">%</span></div><div class="gauge-label">RAM</div></div>
+      <div class="gauge mem"><svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52"/><circle class="bar" cx="60" cy="60" r="52"/></svg><div class="gauge-val"><span class="num pct">–</span><span class="unit">%</span></div><div class="gauge-name"></div><div class="gauge-label">RAM</div></div>
       <div class="gauge batt"><svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52"/><circle class="bar" cx="60" cy="60" r="52"/></svg><div class="gauge-val"><span class="num pct">–</span><span class="unit">%</span></div><div class="gauge-label batt-label">BATT</div></div>
     </div>
     <div class="media">
@@ -195,7 +195,7 @@ function makeSystem() {
       gauge('.cpu', s.cpu.pct); q('.cpu .pct').textContent = Math.round(s.cpu.pct);
       if (s.cpu.name) q('.cpu .gauge-name').textContent = shortChip(s.cpu.name);
     }
-    if (s.mem) { gauge('.mem', s.mem.pct); q('.mem .pct').textContent = Math.round(s.mem.pct); q('.memtext').textContent = `${fmtBytes(s.mem.used)} / ${fmtBytes(s.mem.total)}`; }
+    if (s.mem) { gauge('.mem', s.mem.pct); q('.mem .pct').textContent = Math.round(s.mem.pct); q('.mem .gauge-name').textContent = fmtBytes(s.mem.total); q('.memtext').textContent = `${fmtBytes(s.mem.used)} / ${fmtBytes(s.mem.total)}`; }
     if (s.gpu) {
       q('.gpu').style.display = '';
       if (s.gpu.util != null) { gauge('.gpu', s.gpu.util); q('.gpu .pct').textContent = Math.round(s.gpu.util); }
