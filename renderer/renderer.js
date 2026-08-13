@@ -188,11 +188,22 @@ function makeSystem() {
     bar.style.strokeDashoffset = CIRC * (1 - p / 100);
     bar.style.stroke = p < 60 ? 'var(--good)' : p < 85 ? 'var(--warn)' : 'var(--bad)';
   }
+  // Rolling average over the last 3 samples (~6s) so gauges read steady
+  // (like AIDA64) instead of catching momentary 1-second spikes.
+  const hist = {};
+  function smooth(key, v) {
+    if (v == null || isNaN(v)) return v;
+    const a = hist[key] || (hist[key] = []);
+    a.push(v);
+    if (a.length > 3) a.shift();
+    return a.reduce((s, x) => s + x, 0) / a.length;
+  }
   async function update() {
     const s = await window.dock.getStats();
     if (!s) return;
     if (s.cpu) {
-      gauge('.cpu', s.cpu.pct); q('.cpu .pct').textContent = Math.round(s.cpu.pct);
+      const cp = smooth('cpu', s.cpu.pct);
+      gauge('.cpu', cp); q('.cpu .pct').textContent = Math.round(cp);
       if (s.cpu.name) q('.cpu .gauge-name').textContent = shortChip(s.cpu.name);
     }
     if (s.mem) {
@@ -203,7 +214,7 @@ function makeSystem() {
     }
     if (s.gpu) {
       q('.gpu').style.display = '';
-      if (s.gpu.util != null) { gauge('.gpu', s.gpu.util); q('.gpu .pct').textContent = Math.round(s.gpu.util); }
+      if (s.gpu.util != null) { const gp = smooth('gpu', s.gpu.util); gauge('.gpu', gp); q('.gpu .pct').textContent = Math.round(gp); }
       else { q('.gpu .pct').textContent = '–'; }
       if (s.gpu.name) q('.gpu .gauge-name').textContent = shortChip(s.gpu.name);
     } else {
