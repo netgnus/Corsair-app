@@ -1,6 +1,6 @@
 {
   "name": "ipad-dock",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Always-on-top bottom-bar widget for an iPad used as a second display (photos, clock, weather, system monitor).",
   "main": "main.js",
   "scripts": {
