@@ -199,6 +199,7 @@ function makeSystem() {
     return a.reduce((s, x) => s + x, 0) / a.length;
   }
   async function update() {
+    if (document.hidden) return;              // do nothing while minimized/hidden
     const s = await window.dock.getStats();
     if (!s) return;
     if (s.cpu) {
@@ -246,6 +247,7 @@ function makeSystem() {
 
   // --- now-playing media strip ---
   async function updateMedia() {
+    if (document.hidden) return;              // do nothing while minimized/hidden
     const m = await window.dock.getMedia();
     const title = q('.media-title'), artist = q('.media-artist'), playBtn = q('.m-play');
     if (m && m.title) {
@@ -262,7 +264,11 @@ function makeSystem() {
   }
   q('.m-play').onclick = () => { window.dock.mediaKey('playpause'); setTimeout(updateMedia, 400); };
   updateMedia();
-  const tm = setInterval(updateMedia, 4000);
+  // Each call spawns a full powershell.exe to run media-info.ps1 (~200-400 ms of
+  // CPU per launch, plus an AV image scan and a conhost). At the old 4000 ms this
+  // was 15 process creations a minute, all day. A track title does not change
+  // that often -- 20 s is imperceptible here and cuts the spawns by 80%.
+  const tm = setInterval(updateMedia, 5000);   // cheap now: reads the helper's cache, no spawn
 
   // --- system volume (moved here from the Clock tile) ---
   const mute = q('.cm-mute'), vol = q('.cm-vol');

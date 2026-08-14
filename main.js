@@ -2,7 +2,8 @@ const { app, BrowserWindow, ipcMain, screen, Tray, Menu, dialog, nativeImage, sh
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
+const readline = require('readline');
 
 let si = null;
 try {
@@ -288,42 +289,83 @@ ipcMain.handle('list-photos', async () => {
   return (_photoCache.folder === folder) ? _photoCache.list : [];
 });
 
-// --- GPU via nvidia-smi (preferred on NVIDIA), fallback to systeminformation ---
-let nvidiaOk = true;
-function getGpuNvidia() {
-  return new Promise((resolve) => {
-    if (!nvidiaOk) return resolve(null);
-    const query = 'utilization.gpu,memory.used,memory.total,temperature.gpu,clocks.current.graphics,power.draw,name';
-    execFile('nvidia-smi', [`--query-gpu=${query}`, '--format=csv,noheader,nounits'],
-      { timeout: 1500, windowsHide: true }, (err, stdout) => {
-        if (err || !stdout) { nvidiaOk = false; return resolve(null); }
-        const line = stdout.trim().split('\n')[0];
-        const p = line.split(',').map(s => s.trim());
-        const num = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };
-        resolve({
-          util: num(p[0]),
-          memUsed: num(p[1]) != null ? num(p[1]) * 1024 * 1024 : null,   // MB -> bytes
-          memTotal: num(p[2]) != null ? num(p[2]) * 1024 * 1024 : null,
-          temp: num(p[3]),
-          clock: num(p[4]),
-          power: num(p[5]),
-          name: p[6] || 'GPU',
-          source: 'nvidia-smi'
-        });
-      });
+/* ============================================================
+   Persistent data helpers — spawned ONCE, stream forever.
+   The old design spawned processes on every poll (nvidia-smi every 2s,
+   plus systeminformation's battery/mem/networkStats each spawning
+   PowerShell per call = ~150 process creations/minute), which alone
+   burned a huge chunk of CPU. Never poll by spawning.
+   ============================================================ */
+
+// --- stats-loop.ps1: ONE PowerShell streams {net totals, media} every 2s ---
+let _helper = null, _helperLastSpawn = 0;
+let _mediaCache = null;
+let _netCache = null;    // {rx, tx, iface} as bytes/sec rates
+let _netPrev = null;     // previous cumulative totals
+function startStatsHelper() {
+  if (_helper) return;
+  const now = Date.now();
+  if (now - _helperLastSpawn < 10000) return;   // respawn backoff
+  _helperLastSpawn = now;
+  try {
+    _helper = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'stats-loop.ps1')],
+      { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+  } catch (e) { _helper = null; return; }
+  const rl = readline.createInterface({ input: _helper.stdout });
+  rl.on('line', (line) => {
+    let j; try { j = JSON.parse(line); } catch (e) { return; }
+    _mediaCache = (j.media && j.media.title) ? j.media : null;
+    if (j.net) {
+      if (_netPrev && j.ts > _netPrev.ts && j.net.rx >= _netPrev.rx && j.net.tx >= _netPrev.tx) {
+        const dt = (j.ts - _netPrev.ts) / 1000;
+        _netCache = { rx: (j.net.rx - _netPrev.rx) / dt, tx: (j.net.tx - _netPrev.tx) / dt, iface: j.net.name };
+      }
+      _netPrev = { rx: j.net.rx, tx: j.net.tx, ts: j.ts };
+    }
   });
+  const gone = () => { _helper = null; };
+  _helper.on('exit', gone);
+  _helper.on('error', gone);
 }
-// Cache GPU result briefly so rapid get-stats calls don't spawn nvidia-smi every time.
+
+// --- GPU: ONE persistent `nvidia-smi -l 5` streams a reading every 5s ---
 let _gpuCache = { ts: 0, data: null };
-async function getGpu() {
-  if (Date.now() - _gpuCache.ts < 1800) return _gpuCache.data;
-  const data = await getGpuRaw();
-  _gpuCache = { ts: Date.now(), data };
-  return data;
+let _gpuProc = null, _gpuLastSpawn = 0, _nvidiaFailed = false;
+function startGpuLoop() {
+  if (_gpuProc || _nvidiaFailed) return;
+  const now = Date.now();
+  if (now - _gpuLastSpawn < 15000) return;      // respawn backoff
+  _gpuLastSpawn = now;
+  const query = 'utilization.gpu,memory.used,memory.total,temperature.gpu,clocks.current.graphics,power.draw,name';
+  try {
+    _gpuProc = spawn('nvidia-smi', ['-l', '5', `--query-gpu=${query}`, '--format=csv,noheader,nounits'],
+      { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+  } catch (e) { _nvidiaFailed = true; return; }
+  const rl = readline.createInterface({ input: _gpuProc.stdout });
+  rl.on('line', (line) => {
+    const p = line.split(',').map(s => s.trim());
+    if (p.length < 7) return;
+    const num = (v) => { const n = parseFloat(v); return isNaN(n) ? null : n; };
+    _gpuCache = {
+      ts: Date.now(),
+      data: {
+        util: num(p[0]),
+        memUsed: num(p[1]) != null ? num(p[1]) * 1024 * 1024 : null,   // MB -> bytes
+        memTotal: num(p[2]) != null ? num(p[2]) * 1024 * 1024 : null,
+        temp: num(p[3]),
+        clock: num(p[4]),
+        power: num(p[5]),
+        name: p[6] || 'GPU',
+        source: 'nvidia-smi'
+      }
+    };
+  });
+  _gpuProc.on('exit', (code) => { _gpuProc = null; if (!_gpuCache.data) _nvidiaFailed = true; });
+  _gpuProc.on('error', () => { _gpuProc = null; _nvidiaFailed = true; });
 }
-async function getGpuRaw() {
-  const nv = await getGpuNvidia();
-  if (nv) return nv;
+
+// Fallback for non-NVIDIA machines only — cached 30s so it can't spawn-storm.
+async function getGpuSiFallback() {
   if (!si) return null;
   try {
     const g = await si.graphics();
@@ -341,6 +383,36 @@ async function getGpuRaw() {
       source: 'si'
     };
   } catch (e) { return null; }
+}
+
+async function getGpu() {
+  startGpuLoop();
+  if (!_nvidiaFailed) return _gpuCache.data;    // streamed by the loop (may be null briefly at startup)
+  if (Date.now() - _gpuCache.ts < 30000) return _gpuCache.data;
+  const data = await getGpuSiFallback();
+  _gpuCache = { ts: Date.now(), data };
+  return data;
+}
+
+// --- battery: desktops have none — check once, then never spawn WMI again.
+// (si.battery() on Windows spawns THREE PowerShell processes per call.)
+let _batt = { ts: 0, data: null };
+async function getBattery() {
+  if (_batt.data && _batt.data.hasBattery === false) return _batt.data;   // desktop: cached forever
+  if (_batt.data && Date.now() - _batt.ts < 30000) return _batt.data;     // laptop: refresh every 30s
+  try {
+    const b = si ? await si.battery() : null;
+    _batt = {
+      ts: Date.now(),
+      data: (b && b.hasBattery) ? { pct: b.percent, charging: b.acConnected, hasBattery: true } : { hasBattery: false }
+    };
+  } catch (e) { _batt = { ts: Date.now(), data: { hasBattery: false } }; }
+  return _batt.data;
+}
+
+function stopHelpers() {
+  try { if (_helper) _helper.kill(); } catch (e) {}
+  try { if (_gpuProc) _gpuProc.kill(); } catch (e) {}
 }
 
 // --- FPS from the elevated PresentMon helper (fps.json) ---
@@ -365,57 +437,25 @@ async function getCpuName() {
   return _cpuName;
 }
 
-// --- pick the real active network interface (prefer Wi-Fi/real NIC, skip VPN/virtual) ---
-let _netIface = null, _netIfaceTs = 0;
-const NET_BAD = /zerotier|loopback|bluetooth|virtual|vmware|hyper-v|vethernet|\btap\b|\btun\b|spacedesk|parsec|duet|displaylink|wintun/i;
-async function pickNetIface() {
-  const now = Date.now();
-  if (_netIface && (now - _netIfaceTs < 30000)) return _netIface;
-  if (!si) return null;
-  try {
-    const ifs = await si.networkInterfaces();
-    const arr = Array.isArray(ifs) ? ifs : [ifs];
-    const cand = arr.filter(i => i.operstate === 'up' && i.ip4 && i.ip4 !== '127.0.0.1'
-      && !NET_BAD.test((i.iface || '') + ' ' + (i.ifaceName || '')));
-    cand.sort((a, b) => (b.type === 'wireless' ? 1 : 0) - (a.type === 'wireless' ? 1 : 0)); // prefer wireless
-    _netIface = (cand[0] && cand[0].iface) || null;
-    _netIfaceTs = now;
-  } catch (e) {}
-  return _netIface;
-}
-
+// Everything here reads in-process caches or native os.* — NO process is
+// spawned per poll. Network + media stream from the persistent helper.
 ipcMain.handle('get-stats', async () => {
+  startStatsHelper();
   const stats = {
-    cpu: null, mem: null, net: null, battery: null, gpu: null, fps: null,
+    cpu: null, mem: null, net: _netCache, battery: null, gpu: null, fps: getFps(),
     host: os.hostname(),
     uptime: os.uptime()
   };
-  stats.fps = getFps();
-  if (!si) {
-    const total = os.totalmem();
-    const free = os.freemem();
-    stats.mem = { used: total - free, total, pct: ((total - free) / total) * 100 };
-    stats.gpu = await getGpu();
-    return stats;
-  }
-  try {
-    const iface = await pickNetIface();
-    const [load, mem, net, batt, gpu] = await Promise.all([
-      si.currentLoad(),
-      si.mem(),
-      si.networkStats(iface || '*'),
-      si.battery(),
-      getGpu()
-    ]);
-    stats.cpu = { pct: load.currentLoad, cores: load.cpus ? load.cpus.length : os.cpus().length, name: await getCpuName() };
-    stats.mem = { used: mem.active, total: mem.total, pct: (mem.active / mem.total) * 100 };
-    const n = Array.isArray(net) ? net[0] : net;
-    if (n) stats.net = { rx: n.rx_sec || 0, tx: n.tx_sec || 0, iface: n.iface };
-    if (batt && batt.hasBattery) stats.battery = { pct: batt.percent, charging: batt.acConnected, hasBattery: true };
-    else stats.battery = { hasBattery: false };
-    stats.gpu = gpu;
-  } catch (e) {
-    console.error('stats error', e.message);
+  const total = os.totalmem();
+  const free = os.freemem();
+  stats.mem = { used: total - free, total, pct: ((total - free) / total) * 100 };
+  stats.gpu = await getGpu();
+  stats.battery = await getBattery();
+  if (si) {
+    try {
+      const load = await si.currentLoad();   // native os.cpus() deltas — spawn-free
+      stats.cpu = { pct: load.currentLoad, cores: load.cpus ? load.cpus.length : os.cpus().length, name: await getCpuName() };
+    } catch (e) {}
   }
   return stats;
 });
@@ -454,17 +494,8 @@ ipcMain.handle('get-weather', async () => {
 
 ipcMain.on('window-minimize', () => win && win.minimize());
 
-// --- Now-playing media (Windows SMTC via PowerShell) ---
-ipcMain.handle('get-media', () => new Promise((resolve) => {
-  execFile('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'media-info.ps1')],
-    { timeout: 4000, windowsHide: true }, (err, stdout) => {
-      if (err || !stdout) return resolve(null);
-      try {
-        const j = JSON.parse(stdout.trim() || '{}');
-        resolve(j && j.title ? j : null);
-      } catch (e) { resolve(null); }
-    });
-}));
+// --- Now-playing media: served from the persistent helper's cache (no spawn) ---
+ipcMain.handle('get-media', () => { startStatsHelper(); return _mediaCache; });
 
 // --- Media transport: send a global media key (next | prev | playpause) ---
 ipcMain.on('media-key', (_e, key) => {
@@ -515,10 +546,13 @@ if (!gotLock) {
 } else {
   app.on('second-instance', () => { showDock(); });   // just reveal it — don't reposition
   app.on('before-quit', flushBounds);                  // persist position before exiting
+  app.on('before-quit', stopHelpers);                  // kill the persistent data helpers
   app.whenReady().then(() => {
     loadConfig();
     createWindow();
     buildTray();
+    startStatsHelper();                                // warm the net/media stream
+    startGpuLoop();                                    // warm the GPU stream
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
   });
 }
