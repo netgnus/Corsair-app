@@ -29,7 +29,8 @@ Tap the switcher at the top of any slot to change what it shows.
 ## 🖥️ Requirements
 
 - **Windows 10/11**
-- **[Node.js](https://nodejs.org)** (built with v24)
+- **[Node.js](https://nodejs.org)** (built with v24) — dev/run-from-source workflow
+- **Electron 43** (installed by `npm install`)
 - An NVIDIA GPU for full GPU telemetry via `nvidia-smi` (other GPUs fall back to limited stats)
 
 ## 🚀 Getting started
@@ -59,7 +60,7 @@ Real foreground-game FPS is measured with [PresentMon](https://github.com/GameTe
 powershell -ExecutionPolicy Bypass -File setup-fps.ps1
 ```
 
-A small helper (`fps-monitor.js`) runs PresentMon and writes the current FPS to `fps.json`, which the
+A small helper (`fps-monitor.js`) runs PresentMon and writes the current FPS to `fps-data.json`, which the
 dock reads. FPS shows while a game is presenting; the desktop reads "idle".
 
 ## 🎛️ Controls
@@ -76,23 +77,102 @@ dock reads. FPS shows while a game is presenting; the desktop reads "idle".
 Settings persist to `%APPDATA%\ipad-dock\config.json` (slot choices, per-slot browser URLs, photo
 folder, weather, bar height, chosen display, window position). Delete it to reset to defaults.
 
+Since v1.2.0 the file carries a **schema version** (`configVersion: 2`). Older (v1.1.0) configs are
+migrated automatically on first launch. Every field is validated with safe fallbacks — a corrupted
+or hand-edited value can degrade one setting, never crash the app. Writes are **debounced and
+atomic** (temp file + rename), and flushed on shutdown.
+
 The app-launcher list is built by **`resolve-apps.ps1`** — edit its `$wanted` list and re-run it to
 change which apps appear (it re-extracts icons into `icons/` and rewrites `apps.json`).
 
-## 📁 Project structure
+## 🏗️ Architecture (v1.2.0)
+
+**Main process** (`src/main/`) owns every OS interaction; the sandboxed renderer only draws.
 
 ```
 ipad-dock/
-├── main.js              # Electron main process (window, tray, IPC, GPU/FPS/weather)
-├── preload.js           # secure context bridge
-├── renderer/            # UI — index.html, styles.css, renderer.js (widgets + slot manager)
-├── fps-monitor.js       # PresentMon → fps.json helper
-├── resolve-apps.ps1     # builds the launcher's app list + icons
-├── setup-fps.ps1        # registers the FPS scheduled task
-├── make-shortcuts.ps1   # icon + Desktop/Startup shortcuts
-├── tools/PresentMon.exe # bundled FPS capture (MIT)
-└── start.bat            # one-click launcher
+├── main.js                 # entry: dock UI, or --fps-helper headless mode
+├── preload.js              # the only bridge (contextBridge, thin + explicit)
+├── src/main/
+│   ├── app.js              # lifecycle: single instance, startup order, shutdown
+│   ├── config.js           # schema v2, migration, validation, atomic saves
+│   ├── window.js           # frameless window, placement, remembered bounds
+│   ├── tray.js             # tray icon/menu (rebuilt only on display/height changes)
+│   ├── security.js         # sandbox rules, webview lockdown, popups, permissions
+│   ├── telemetry.js        # persistent helpers + watchdogs + health
+│   ├── weather.js          # Open-Meteo, cached in main (10 min TTL)
+│   ├── photos.js           # async time-bounded recursive scan + cache
+│   ├── launcher.js         # ID-based app launching (no renderer paths)
+│   ├── audio.js            # user-triggered volume / media-key one-shots
+│   └── ipc.js              # all handlers, sender-validated
+├── renderer/
+│   ├── index.html          # CSP-protected shell
+│   ├── store.js            # ONE shared poll/subscribe layer for all widgets
+│   ├── slots.js            # slot manager + widget lifecycle (pause/resume)
+│   ├── settings.js         # settings overlay + Dock Health panel
+│   ├── app.js              # bootstrap
+│   └── widgets/            # browser, clock, system, photos, launcher
+├── stats-loop.ps1          # persistent net+media stream (bounded WinRT waits)
+├── fps-monitor.js          # PresentMon wrapper (ownership-aware, atomic writes)
+└── tools/PresentMon.exe    # bundled FPS capture (MIT)
 ```
+
+### Telemetry (the golden rule)
+
+**Nothing spawns a process per poll.** One persistent `stats-loop.ps1` streams network + media;
+one persistent `nvidia-smi -l 5` streams GPU; CPU/RAM are native in-process reads; battery is
+checked once (desktops never again). A **watchdog** restarts any helper that dies — or that is
+alive but silent for >12 s — with backoff, and counts restarts. Orphan helpers from a force-killed
+previous run are cleaned at startup (ownership-checked; nothing unrelated is ever touched).
+
+In the renderer, one shared store polls each topic once no matter how many widgets display it —
+`System | System | System` still causes a single stats cycle — and all polling pauses while the
+dock is hidden.
+
+### Security
+
+- Renderer runs with `contextIsolation`, `sandbox: true`, no Node.
+- The Browser widget's `<webview>` guests are forced sandboxed with no preload/Node; only http(s)
+  loads; popups never create windows (http(s) popups are handled by the controlled
+  window-open handler; everything else is dropped).
+- Device permissions (camera, mic, geolocation, notifications, MIDI, clipboard, …) are **denied by
+  default** for all remote content; only fullscreen is allowed.
+- The local UI has a strict CSP and can never navigate away from its own page.
+- IPC is sender-validated; `set-config` accepts only whitelisted, validated fields; the launcher
+  uses opaque IDs — the renderer can never supply a filesystem path.
+
+### Dock Health
+
+Settings (⚙) includes a live **Dock Health** panel: helper status + data age, restart counts,
+PresentMon/FPS state, weather cache age, photo count/scan state, and the active network interface.
+
+### Packaging notes
+
+`main.js` supports `--fps-helper`: the packaged app can run its own FPS monitor
+(`iPadDock.exe --fps-helper`) so a machine without Node keeps FPS functionality. In development,
+`node fps-monitor.js` still works and the existing scheduled task is unchanged.
+
+## 📜 Changelog
+
+### v1.2.0 — hardening & architecture (2026-08)
+- Electron 33 → **43**
+- Renderer sandboxed; webview guests locked down; `allowpopups` removed; deny-by-default
+  permissions; CSP on the local UI
+- IPC hardened: sender validation, whitelisted+validated `set-config`, ID-based app launcher
+- Config schema v2 with automatic migration, full validation, atomic debounced writes
+- Helper **watchdogs** (restart on death *or* silence) + startup orphan cleanup + health tracking
+- `stats-loop.ps1`: bounded WinRT waits (no more infinite media hangs), media manager reuse with
+  self-healing backoff, **default-route** network adapter selection
+- PresentMon cleanup is ownership-aware (never kills unrelated instances); `fps.json` writes atomic
+- Renderer: shared telemetry store (no multiplied polling), widget pause/resume lifecycle,
+  modular codebase, **Dock Health** diagnostics panel
+- `--fps-helper` mode for future Node-free packaging
+
+### v1.1.0 — performance (2026-08)
+- Eliminated per-poll process spawning (~150/min → 0): persistent helper streams; CPU ~60% → <1%
+
+### v1.0.0 — first release (2026-06)
+- Three switchable slots; Browser, Apps, Photos, Clock+Weather, System widgets
 
 ## 🙏 Credits
 

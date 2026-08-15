@@ -2,6 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <!-- CSP for the LOCAL dock UI only (webview guest pages are separate documents
+       with their own policies). Photos + launcher icons load via file:, so img
+       allows file:/data:. No remote scripts, objects, or form posts, ever. -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self';
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' file: data:;
+    connect-src 'none';
+    object-src 'none';
+    base-uri 'none';
+    form-action 'none'" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>iPad Dock</title>
   <link rel="stylesheet" href="styles.css" />
@@ -53,6 +65,10 @@
           <input type="number" step="any" id="lonIn" placeholder="lon" />
         </div>
       </div>
+      <div class="row health">
+        <label>Dock Health</label>
+        <div id="healthBody" class="health-body">Loading…</div>
+      </div>
       <div class="actions">
         <button class="btn ghost" id="closeSettings">Close</button>
         <button class="btn" id="saveSettings">Save</button>
@@ -61,6 +77,16 @@
     </div>
   </div>
 
-  <script src="renderer.js"></script>
+  <!-- classic scripts, order matters: helpers → store → widgets → slots → settings → bootstrap -->
+  <script src="util.js"></script>
+  <script src="store.js"></script>
+  <script src="widgets/clock.js"></script>
+  <script src="widgets/photos.js"></script>
+  <script src="widgets/system.js"></script>
+  <script src="widgets/browser.js"></script>
+  <script src="widgets/launcher.js"></script>
+  <script src="slots.js"></script>
+  <script src="settings.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
